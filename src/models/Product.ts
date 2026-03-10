@@ -1,26 +1,41 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
+export type Material = "gold" | "silver" | "platinum" | "rose-gold" | "diamond";
+export type Occasion = "wedding" | "casual" | "party" | "gift" | "anniversary";
+
 export interface IProduct extends Document {
   name: string;
   slug: string;
   description: string;
+  shortDescription?: string;
+  longDescription?: string;
   price: number;
   comparePrice?: number;
+  originalPrice?: number;
   sku: string;
   trackInventory: boolean;
   inventory: number;
+  stockCount?: number;
+  inStock?: boolean;
   images: string[];
   category: mongoose.Types.ObjectId;
   tags: string[];
   isActive: boolean;
   isFeatured: boolean;
+  isBestseller?: boolean;
+  isNewProduct?: boolean;
+  material?: Material;
+  materials?: string[];
+  occasion?: Occasion[];
+  sizes?: string[];
+  rating?: number;
+  reviewCount?: number;
   weight?: number;
   dimensions?: {
     length: number;
     width: number;
     height: number;
   };
-  materials: string[];
   careInstructions?: string;
   seoTitle?: string;
   seoDescription?: string;
@@ -48,6 +63,16 @@ const productSchema = new Schema<IProduct>({
     trim: true,
     maxlength: [2000, 'Description cannot exceed 2000 characters']
   },
+  shortDescription: {
+    type: String,
+    trim: true,
+    maxlength: [500, 'Short description cannot exceed 500 characters']
+  },
+  longDescription: {
+    type: String,
+    trim: true,
+    maxlength: [5000, 'Long description cannot exceed 5000 characters']
+  },
   price: {
     type: Number,
     required: [true, 'Product price is required'],
@@ -56,6 +81,10 @@ const productSchema = new Schema<IProduct>({
   comparePrice: {
     type: Number,
     min: [0, 'Compare price cannot be negative']
+  },
+  originalPrice: {
+    type: Number,
+    min: [0, 'Original price cannot be negative']
   },
   sku: {
     type: String,
@@ -73,6 +102,15 @@ const productSchema = new Schema<IProduct>({
     required: [true, 'Inventory is required'],
     min: [0, 'Inventory cannot be negative'],
     default: 0
+  },
+  stockCount: {
+    type: Number,
+    min: [0, 'Stock count cannot be negative'],
+    default: 0
+  },
+  inStock: {
+    type: Boolean,
+    default: true
   },
   images: [{
     type: String,
@@ -95,6 +133,39 @@ const productSchema = new Schema<IProduct>({
   isFeatured: {
     type: Boolean,
     default: false
+  },
+  isBestseller: {
+    type: Boolean,
+    default: false
+  },
+  isNewProduct: {
+    type: Boolean,
+    default: false
+  },
+  material: {
+    type: String,
+    enum: ['gold', 'silver', 'platinum', 'rose-gold', 'diamond'],
+    trim: true
+  },
+  occasion: [{
+    type: String,
+    enum: ['wedding', 'casual', 'party', 'gift', 'anniversary'],
+    trim: true
+  }],
+  sizes: [{
+    type: String,
+    trim: true
+  }],
+  rating: {
+    type: Number,
+    min: [0, 'Rating cannot be negative'],
+    max: [5, 'Rating cannot exceed 5'],
+    default: 0
+  },
+  reviewCount: {
+    type: Number,
+    min: [0, 'Review count cannot be negative'],
+    default: 0
   },
   weight: {
     type: Number,

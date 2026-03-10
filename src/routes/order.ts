@@ -1,10 +1,12 @@
 import express from 'express';
 import { body } from 'express-validator';
 import { Order, Cart, Product } from '../models';
+import { Settings } from '../models/Settings';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { CustomError } from '../middleware/errorHandler';
 import { validateRequest } from '../middleware/validate';
 import { io } from '../server';
+import { sendEmail, emailTemplates } from '../services/emailService';
 
 const router = express.Router();
 
@@ -113,8 +115,12 @@ router.post('/', [
       subtotal += product.price * cartItem.quantity;
     }
 
-    // Calculate totals
-    const shippingCost = 0; // You can implement shipping calculation logic here
+    // Calculate totals using settings
+    const settings = await Settings.findOne();
+    const freeShippingThreshold = settings?.shipping?.freeShippingThreshold || 500;
+    const defaultShippingCost = settings?.shipping?.defaultShippingCost || 25;
+    
+    const shippingCost = subtotal >= freeShippingThreshold ? 0 : defaultShippingCost;
     const tax = subtotal * 0.13; // 13% tax - adjust as needed
     const totalAmount = subtotal + shippingCost + tax;
 
@@ -146,7 +152,7 @@ router.post('/', [
     cart.items = [];
     await cart.save();
 
-    // Notify admin about new order
+    // Notify admin about new order via Socket.IO
     io.to('admin-room').emit('new-order', {
       orderId: order._id,
       orderNumber: order.orderNumber,
@@ -154,6 +160,33 @@ router.post('/', [
       customerName: req.user.name,
       customerEmail: req.user.email
     });
+
+    // Send email notification to admin
+    try {
+      const settings = await Settings.findOne();
+      const adminEmail = settings?.storeEmail || process.env.ADMIN_EMAIL || process.env.EMAIL_USER;
+      
+      if (adminEmail) {
+        const orderData = {
+          orderNumber: order.orderNumber,
+          customerName: req.user.name,
+          customerEmail: req.user.email,
+          totalAmount: order.totalAmount,
+          createdAt: order.createdAt,
+          items: orderItems,
+          shippingAddress: shippingAddress
+        };
+        
+        await sendEmail({
+          to: adminEmail,
+          subject: `New Order Received - ${order.orderNumber}`,
+          html: emailTemplates.newOrderAdmin(orderData).html
+        });
+      }
+    } catch (emailError) {
+      console.error('Failed to send admin notification email:', emailError);
+      // Don't fail the order creation if email fails
+    }
 
     // Populate order details for response
     const populatedOrder = await Order.findById(order._id).populate('items.product', 'name images');

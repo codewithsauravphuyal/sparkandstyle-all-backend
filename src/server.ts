@@ -18,6 +18,9 @@ import adminRoutes from './routes/admin';
 import uploadRoutes from './routes/upload';
 import blogRoutes from './routes/blog';
 import adminBlogRoutes from './routes/adminBlog';
+import contactRoutes from './routes/contact';
+import wishlistRoutes from './routes/wishlist';
+import settingsRoutes from './routes/settings';
 
 // Import middleware
 import { errorHandler } from './middleware/errorHandler';
@@ -68,6 +71,9 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/admin/blog', adminBlogRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/blog', blogRoutes);
+app.use('/api/contact', contactRoutes);
+app.use('/api/wishlist', wishlistRoutes);
+app.use('/api/settings', settingsRoutes);
 
 // Socket.IO for real-time notifications
 io.on('connection', (socket) => {

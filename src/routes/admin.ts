@@ -1,9 +1,11 @@
 import express from 'express';
 import { body } from 'express-validator';
-import { User, Product, Order } from '../models';
+import { User, Product, Order, Contact, Wishlist, Cart, BlogPost } from '../models';
+import { Settings } from '../models/Settings';
 import { authenticate, authorize, AuthRequest } from '../middleware/auth';
 import { CustomError } from '../middleware/errorHandler';
 import { validateRequest } from '../middleware/validate';
+import { sendEmail, emailTemplates } from '../services/emailService';
  
 import { generateToken } from '../utils/generateToken';
 import jwt from 'jsonwebtoken';
@@ -124,19 +126,55 @@ router.get('/me', async (req: AuthRequest, res: any, next: any) => {
 // Dashboard statistics
 router.get('/dashboard', async (req: AuthRequest, res: any, next: any) => {
   try {
+    // Basic counts
     const totalUsers = await User.countDocuments({ role: 'user' });
-    const totalProducts = await Product.countDocuments();
+    const totalProducts = await Product.countDocuments({ isActive: true });
     const totalOrders = await Order.countDocuments();
+    const totalContacts = await Contact.countDocuments();
+    const totalWishlists = await Wishlist.countDocuments();
+    const totalBlogPosts = await BlogPost.countDocuments({ status: 'published' });
+    
+    // Product stats
+    const bestsellers = await Product.countDocuments({ isBestseller: true, isActive: true });
+    const newArrivals = await Product.countDocuments({ isNewProduct: true, isActive: true });
+    
+    // Order stats
+    const pendingOrders = await Order.countDocuments({ status: 'pending' });
+    const confirmedOrders = await Order.countDocuments({ status: 'confirmed' });
+    const shippedOrders = await Order.countDocuments({ status: 'shipped' });
+    const deliveredOrders = await Order.countDocuments({ status: 'delivered' });
+    
+    // Revenue stats
     const totalRevenue = await Order.aggregate([
       { $match: { status: { $ne: 'cancelled' } } },
       { $group: { _id: null, total: { $sum: '$totalAmount' } } }
     ]);
-
+    
+    const monthlyRevenue = await Order.aggregate([
+      { 
+        $match: { 
+          status: { $ne: 'cancelled' },
+          createdAt: { $gte: new Date(new Date().setMonth(new Date().getMonth() - 1)) }
+        } 
+      },
+      { $group: { _id: null, total: { $sum: '$totalAmount' } } }
+    ]);
+    
+    // Contact stats
+    const newContacts = await Contact.countDocuments({ status: 'new' });
+    const unreadContacts = await Contact.countDocuments({ status: { $in: ['new', 'read'] } });
+    
+    // Recent activity
     const recentOrders = await Order.find()
       .populate('user', 'name email')
       .sort({ createdAt: -1 })
       .limit(5);
-
+    
+    const recentContacts = await Contact.find()
+      .sort({ createdAt: -1 })
+      .limit(5);
+    
+    // Top products
     const topProducts = await Order.aggregate([
       { $unwind: '$items' },
       { $group: { _id: '$items.product', totalSold: { $sum: '$items.quantity' } } },
@@ -156,11 +194,37 @@ router.get('/dashboard', async (req: AuthRequest, res: any, next: any) => {
     res.json({
       success: true,
       data: {
+        // Basic counts
         totalUsers,
         totalProducts,
         totalOrders,
+        totalContacts,
+        totalWishlists,
+        totalBlogPosts,
+        
+        // Product stats
+        bestsellers,
+        newArrivals,
+        
+        // Order stats
+        pendingOrders,
+        confirmedOrders,
+        shippedOrders,
+        deliveredOrders,
+        
+        // Revenue
         totalRevenue: totalRevenue[0]?.total || 0,
+        monthlyRevenue: monthlyRevenue[0]?.total || 0,
+        
+        // Contact stats
+        newContacts,
+        unreadContacts,
+        
+        // Recent activity
         recentOrders,
+        recentContacts,
+        
+        // Top products
         topProducts
       }
     });
@@ -250,6 +314,12 @@ const updateOrderStatusValidation = [
   body('shippingInfo.trackingLink').optional().trim().isLength({ min: 1 }).withMessage('Tracking link is required')
 ];
 
+// Helper function to generate tracking URL from template
+const generateTrackingUrl = (template: string | undefined, trackingNumber: string): string => {
+  if (!template) return '';
+  return template.replace('{trackingNumber}', trackingNumber);
+};
+
 const updateOrderStatusHandler = async (req: AuthRequest, res: any, next: any) => {
   try {
     const { status, shippingInfo } = req.body;
@@ -265,14 +335,68 @@ const updateOrderStatusHandler = async (req: AuthRequest, res: any, next: any) =
 
     // Add shipping info if order is being shipped
     if (status === 'shipped' && shippingInfo) {
+      // Get settings to find tracking URL template
+      const settings = await Settings.findOne();
+      const deliveryPartner = settings?.shipping?.deliveryPartners.find(
+        (p: any) => p.name === shippingInfo.deliveryPartner && p.enabled
+      );
+      
+      // Generate tracking URL if template exists
+      let trackingLink = shippingInfo.trackingLink;
+      if (!trackingLink && deliveryPartner?.trackingUrlTemplate && shippingInfo.trackingNumber) {
+        trackingLink = generateTrackingUrl(deliveryPartner.trackingUrlTemplate, shippingInfo.trackingNumber);
+      }
+
       order.shippingInfo = {
         ...order.shippingInfo,
         ...shippingInfo,
-        estimatedDelivery: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days from now
+        trackingLink: trackingLink || shippingInfo.trackingLink,
+        estimatedDelivery: shippingInfo.estimatedDelivery 
+          ? new Date(shippingInfo.estimatedDelivery)
+          : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // Default 7 days from now
       };
     }
 
     await order.save();
+
+    // Send email notification to customer when order is shipped
+    if (status === 'shipped' && order.user && (order.user as any).email) {
+      try {
+        const orderData = {
+          orderNumber: order.orderNumber,
+          customerName: (order.user as any).name,
+          shippingInfo: order.shippingInfo
+        };
+
+        await sendEmail({
+          to: (order.user as any).email,
+          subject: `Your Order Has Been Shipped - ${order.orderNumber}`,
+          html: emailTemplates.orderShipped(orderData).html
+        });
+      } catch (emailError) {
+        console.error('Failed to send shipping notification email:', emailError);
+        // Don't fail the status update if email fails
+      }
+    }
+
+    // Send email notification when order is delivered
+    if (status === 'delivered' && order.user && (order.user as any).email) {
+      try {
+        const orderData = {
+          orderNumber: order.orderNumber,
+          customerName: (order.user as any).name
+        };
+
+        await sendEmail({
+          to: (order.user as any).email,
+          subject: `Your Order Has Been Delivered - ${order.orderNumber}`,
+          html: emailTemplates.orderDelivered(orderData).html
+        });
+      } catch (emailError) {
+        console.error('Failed to send delivery notification email:', emailError);
+        // Don't fail the status update if email fails
+      }
+    }
 
     res.json({
       success: true,

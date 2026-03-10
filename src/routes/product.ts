@@ -16,7 +16,11 @@ router.get('/', [
   query('minPrice').optional().isFloat({ min: 0 }).withMessage('Minimum price must be positive'),
   query('maxPrice').optional().isFloat({ min: 0 }).withMessage('Maximum price must be positive'),
   query('featured').optional().isBoolean().withMessage('Featured must be a boolean'),
-  query('sortBy').optional().isIn(['name', 'price', 'createdAt']).withMessage('Invalid sort field'),
+  query('material').optional().isIn(['gold', 'silver', 'platinum', 'rose-gold', 'diamond']).withMessage('Invalid material'),
+  query('occasion').optional().isIn(['wedding', 'casual', 'party', 'gift', 'anniversary']).withMessage('Invalid occasion'),
+  query('bestseller').optional().isBoolean().withMessage('Bestseller must be a boolean'),
+  query('new').optional().isBoolean().withMessage('New must be a boolean'),
+  query('sortBy').optional().isIn(['name', 'price', 'createdAt', 'rating', 'popular']).withMessage('Invalid sort field'),
   query('sortOrder').optional().isIn(['asc', 'desc']).withMessage('Sort order must be asc or desc')
 ], validateRequest, async (req: any, res: any, next: any) => {
   try {
@@ -35,8 +39,28 @@ router.get('/', [
       filter.isFeatured = req.query.featured === 'true';
     }
 
+    if (req.query.bestseller) {
+      filter.isBestseller = req.query.bestseller === 'true';
+    }
+
+    if (req.query.new) {
+      filter.isNewProduct = req.query.new === 'true';
+    }
+
+    if (req.query.material) {
+      filter.material = req.query.material;
+    }
+
+    if (req.query.occasion) {
+      filter.occasion = req.query.occasion;
+    }
+
     if (req.query.search) {
-      filter.$text = { $search: req.query.search };
+      filter.$or = [
+        { name: { $regex: req.query.search, $options: 'i' } },
+        { description: { $regex: req.query.search, $options: 'i' } },
+        { tags: { $in: [new RegExp(req.query.search, 'i')] } }
+      ];
     }
 
     if (req.query.minPrice || req.query.maxPrice) {
@@ -48,8 +72,14 @@ router.get('/', [
     // Build sort
     let sort: any = { createdAt: -1 };
     if (req.query.sortBy) {
-      const sortOrder = req.query.sortOrder === 'asc' ? 1 : -1;
-      sort = { [req.query.sortBy]: sortOrder };
+      if (req.query.sortBy === 'popular') {
+        sort = { reviewCount: -1 };
+      } else if (req.query.sortBy === 'rating') {
+        sort = { rating: -1 };
+      } else {
+        const sortOrder = req.query.sortOrder === 'asc' ? 1 : -1;
+        sort = { [req.query.sortBy]: sortOrder };
+      }
     }
 
     const products = await Product.find(filter)
