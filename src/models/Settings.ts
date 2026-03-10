@@ -31,11 +31,8 @@ export interface ISettings extends Document {
 }
 
 function getDefaultStoreEmail() {
-  return (
-    process.env.STORE_EMAIL ||
-    process.env.ADMIN_EMAIL ||
-    'admin@sparkleandstyle.com'
-  ).toString().toLowerCase();
+  const email = process.env.STORE_EMAIL ?? process.env.ADMIN_EMAIL ?? '';
+  return email.toLowerCase();
 }
 
 const paymentSettingsSchema = new Schema<IPaymentSettings>({
