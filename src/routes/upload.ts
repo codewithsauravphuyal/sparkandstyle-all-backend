@@ -1,7 +1,7 @@
 import express from 'express';
-import multer from 'multer';
+import multer, { StorageEngine } from 'multer';
 import { v2 as cloudinary } from 'cloudinary';
-import cloudinaryStorage from 'multer-storage-cloudinary';
+import CloudinaryStorage from 'multer-storage-cloudinary';
 import { authenticate, authorize, AuthRequest } from '../middleware/auth';
 import { CustomError } from '../middleware/errorHandler';
 
@@ -15,7 +15,7 @@ cloudinary.config({
 });
 
 // Configure Multer storage for Cloudinary
-const storage = cloudinaryStorage({
+const storage = new CloudinaryStorage({
   cloudinary,
   params: {
     folder: 'sparkleandstyle',
@@ -26,7 +26,7 @@ const storage = cloudinaryStorage({
       return `${originalName}-${timestamp}`;
     }
   } as any
-});
+}) as StorageEngine;
 
 // Initialize multer upload
 const upload = multer({

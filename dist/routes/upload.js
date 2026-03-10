@@ -6,7 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const multer_1 = __importDefault(require("multer"));
 const cloudinary_1 = require("cloudinary");
-const multer_storage_cloudinary_1 = require("multer-storage-cloudinary");
+const multer_storage_cloudinary_1 = __importDefault(require("multer-storage-cloudinary"));
 const auth_1 = require("../middleware/auth");
 const errorHandler_1 = require("../middleware/errorHandler");
 const router = express_1.default.Router();
@@ -15,7 +15,7 @@ cloudinary_1.v2.config({
     api_key: process.env.CLOUDINARY_API_KEY,
     api_secret: process.env.CLOUDINARY_API_SECRET
 });
-const storage = new multer_storage_cloudinary_1.CloudinaryStorage({
+const storage = new multer_storage_cloudinary_1.default({
     cloudinary: cloudinary_1.v2,
     params: {
         folder: 'sparkleandstyle',

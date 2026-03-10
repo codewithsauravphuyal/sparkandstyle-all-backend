@@ -13,6 +13,10 @@ declare module 'multer-storage-cloudinary' {
     };
   }
   
-  function cloudinaryStorage(options: CloudinaryStorageOptions): StorageEngine;
-  export = cloudinaryStorage;
+  interface CloudinaryStorageConstructor {
+    new (options: CloudinaryStorageOptions): StorageEngine;
+  }
+  
+  const CloudinaryStorage: CloudinaryStorageConstructor;
+  export default CloudinaryStorage;
 }

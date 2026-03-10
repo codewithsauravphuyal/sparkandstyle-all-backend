@@ -20,6 +20,8 @@ const cart_1 = __importDefault(require("./routes/cart"));
 const order_1 = __importDefault(require("./routes/order"));
 const admin_1 = __importDefault(require("./routes/admin"));
 const upload_1 = __importDefault(require("./routes/upload"));
+const blog_1 = __importDefault(require("./routes/blog"));
+const adminBlog_1 = __importDefault(require("./routes/adminBlog"));
 const errorHandler_1 = require("./middleware/errorHandler");
 const notFound_1 = require("./middleware/notFound");
 dotenv_1.default.config();
@@ -55,7 +57,9 @@ app.use('/api/categories', category_1.default);
 app.use('/api/cart', cart_1.default);
 app.use('/api/orders', order_1.default);
 app.use('/api/admin', admin_1.default);
+app.use('/api/admin/blog', adminBlog_1.default);
 app.use('/api/upload', upload_1.default);
+app.use('/api/blog', blog_1.default);
 io.on('connection', (socket) => {
     console.log('Client connected:', socket.id);
     socket.on('join-admin-room', () => {

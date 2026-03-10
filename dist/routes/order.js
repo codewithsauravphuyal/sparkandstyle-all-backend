@@ -139,7 +139,7 @@ router.post('/', [
         next(error);
     }
 });
-router.put('/:id/cancel', async (req, res, next) => {
+const cancelOrderHandler = async (req, res, next) => {
     try {
         const order = await models_1.Order.findOne({
             _id: req.params.id,
@@ -167,6 +167,8 @@ router.put('/:id/cancel', async (req, res, next) => {
     catch (error) {
         next(error);
     }
-});
+};
+router.put('/:id/cancel', cancelOrderHandler);
+router.post('/:id/cancel', cancelOrderHandler);
 exports.default = router;
 //# sourceMappingURL=order.js.map

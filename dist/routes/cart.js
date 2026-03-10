@@ -142,7 +142,7 @@ router.delete('/remove/:productId', async (req, res, next) => {
         next(error);
     }
 });
-router.delete('/clear', async (req, res, next) => {
+const clearCartHandler = async (req, res, next) => {
     try {
         const cart = await models_1.Cart.findOne({ user: req.user._id });
         if (!cart) {
@@ -159,6 +159,8 @@ router.delete('/clear', async (req, res, next) => {
     catch (error) {
         next(error);
     }
-});
+};
+router.delete('/clear', clearCartHandler);
+router.post('/clear', clearCartHandler);
 exports.default = router;
 //# sourceMappingURL=cart.js.map

@@ -9,9 +9,100 @@ const models_1 = require("../models");
 const auth_1 = require("../middleware/auth");
 const errorHandler_1 = require("../middleware/errorHandler");
 const validate_1 = require("../middleware/validate");
+const generateToken_1 = require("../utils/generateToken");
+const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const router = express_1.default.Router();
+router.post('/login', [
+    (0, express_validator_1.body)('username').trim().notEmpty().withMessage('Username is required'),
+    (0, express_validator_1.body)('password').trim().notEmpty().withMessage('Password is required')
+], validate_1.validateRequest, async (req, res, next) => {
+    try {
+        const { username, password } = req.body;
+        const admin = await models_1.User.findOne({
+            role: 'admin',
+            $or: [
+                { email: username.toLowerCase() },
+                { name: username }
+            ]
+        }).select('+password');
+        if (!admin) {
+            throw new errorHandler_1.CustomError('Invalid credentials', 401);
+        }
+        const isPasswordValid = await admin.comparePassword(password);
+        if (!isPasswordValid) {
+            throw new errorHandler_1.CustomError('Invalid credentials', 401);
+        }
+        const token = (0, generateToken_1.generateToken)(admin._id.toString());
+        delete admin.password;
+        res.json({
+            success: true,
+            message: 'Login successful',
+            data: {
+                user: admin,
+                token
+            }
+        });
+    }
+    catch (error) {
+        next(error);
+    }
+});
+router.post('/create-admin', [
+    (0, express_validator_1.body)('name').trim().isLength({ min: 2, max: 50 }).withMessage('Name must be between 2 and 50 characters'),
+    (0, express_validator_1.body)('email').isEmail().normalizeEmail().withMessage('Please provide a valid email'),
+    (0, express_validator_1.body)('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters long')
+], validate_1.validateRequest, async (req, res, next) => {
+    try {
+        const adminCount = await models_1.User.countDocuments({ role: 'admin' });
+        if (adminCount > 0) {
+            const token = (req.header('Authorization') || '').replace('Bearer ', '').trim();
+            if (!token) {
+                throw new errorHandler_1.CustomError('Access denied. No token provided.', 401);
+            }
+            const decoded = jsonwebtoken_1.default.verify(token, process.env.JWT_SECRET);
+            const requester = await models_1.User.findById(decoded.id).select('-password');
+            if (!requester) {
+                throw new errorHandler_1.CustomError('Invalid token. User not found.', 401);
+            }
+            if (requester.role !== 'admin') {
+                throw new errorHandler_1.CustomError('Access denied. Insufficient permissions.', 403);
+            }
+        }
+        const { name, email, password } = req.body;
+        const existingUser = await models_1.User.findOne({ email });
+        if (existingUser) {
+            throw new errorHandler_1.CustomError('User already exists with this email', 400);
+        }
+        const user = await models_1.User.create({
+            name,
+            email,
+            password,
+            role: 'admin'
+        });
+        delete user.password;
+        res.status(201).json({
+            success: true,
+            message: 'Admin user created successfully',
+            data: user
+        });
+    }
+    catch (error) {
+        next(error);
+    }
+});
 router.use(auth_1.authenticate);
 router.use((0, auth_1.authorize)('admin'));
+router.get('/me', async (req, res, next) => {
+    try {
+        res.json({
+            success: true,
+            data: req.user
+        });
+    }
+    catch (error) {
+        next(error);
+    }
+});
 router.get('/dashboard', async (req, res, next) => {
     try {
         const totalUsers = await models_1.User.countDocuments({ role: 'user' });
@@ -121,12 +212,13 @@ router.get('/orders', async (req, res, next) => {
         next(error);
     }
 });
-router.put('/orders/:id/status', [
+const updateOrderStatusValidation = [
     (0, express_validator_1.body)('status').isIn(['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled']).withMessage('Invalid order status'),
     (0, express_validator_1.body)('shippingInfo.deliveryPartner').optional().trim().isLength({ min: 1 }).withMessage('Delivery partner is required when shipping'),
     (0, express_validator_1.body)('shippingInfo.trackingNumber').optional().trim().isLength({ min: 1 }).withMessage('Tracking number is required'),
     (0, express_validator_1.body)('shippingInfo.trackingLink').optional().trim().isLength({ min: 1 }).withMessage('Tracking link is required')
-], validate_1.validateRequest, async (req, res, next) => {
+];
+const updateOrderStatusHandler = async (req, res, next) => {
     try {
         const { status, shippingInfo } = req.body;
         const orderId = req.params.id;
@@ -153,7 +245,9 @@ router.put('/orders/:id/status', [
     catch (error) {
         next(error);
     }
-});
+};
+router.put('/orders/:id/status', updateOrderStatusValidation, validate_1.validateRequest, updateOrderStatusHandler);
+router.patch('/orders/:id/status', updateOrderStatusValidation, validate_1.validateRequest, updateOrderStatusHandler);
 router.get('/orders/:id', async (req, res, next) => {
     try {
         const order = await models_1.Order.findById(req.params.id)
@@ -165,34 +259,6 @@ router.get('/orders/:id', async (req, res, next) => {
         res.json({
             success: true,
             data: order
-        });
-    }
-    catch (error) {
-        next(error);
-    }
-});
-router.post('/create-admin', [
-    (0, express_validator_1.body)('name').trim().isLength({ min: 2, max: 50 }).withMessage('Name must be between 2 and 50 characters'),
-    (0, express_validator_1.body)('email').isEmail().normalizeEmail().withMessage('Please provide a valid email'),
-    (0, express_validator_1.body)('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters long')
-], validate_1.validateRequest, async (req, res, next) => {
-    try {
-        const { name, email, password } = req.body;
-        const existingUser = await models_1.User.findOne({ email });
-        if (existingUser) {
-            throw new errorHandler_1.CustomError('User already exists with this email', 400);
-        }
-        const user = await models_1.User.create({
-            name,
-            email,
-            password,
-            role: 'admin'
-        });
-        delete user.password;
-        res.status(201).json({
-            success: true,
-            message: 'Admin user created successfully',
-            data: user
         });
     }
     catch (error) {
