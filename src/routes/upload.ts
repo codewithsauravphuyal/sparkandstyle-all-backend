@@ -1,7 +1,7 @@
 import express from 'express';
 import multer from 'multer';
 import { v2 as cloudinary } from 'cloudinary';
-import { CloudinaryStorage } from 'multer-storage-cloudinary';
+import cloudinaryStorage from 'multer-storage-cloudinary';
 import { authenticate, authorize, AuthRequest } from '../middleware/auth';
 import { CustomError } from '../middleware/errorHandler';
 
@@ -15,7 +15,7 @@ cloudinary.config({
 });
 
 // Configure Multer storage for Cloudinary
-const storage = new CloudinaryStorage({
+const storage = cloudinaryStorage({
   cloudinary,
   params: {
     folder: 'sparkleandstyle',
